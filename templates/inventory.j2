@@ -1,0 +1,27 @@
+---
+k3s_cluster:
+  children:
+    server:
+      hosts:
+{% if server_hosts is defined and server_hosts %}
+    {% for ip in server_hosts %}
+        {{ ip }}:
+    {% endfor %}
+{% else %}
+        {{ targetHost }}:
+{% endif %}
+{% if agent_hosts is defined and agent_hosts %}
+    agent:
+      hosts:
+    {% for ip in agent_hosts %}
+        {{ ip }}:
+    {% endfor %}
+{% endif %}
+
+  # Required Vars
+  vars:
+    ansible_port: 22
+    ansible_user: "{{ ansible_user }}"
+    ansible_ssh_private_key_file: {{ pccagent_key | default('/root/.ssh/id_rsa_ansible') }}
+    k3s_version: "{{ k3s_version | default(k3s_default_version)}}"
+    api_endpoint: "{{ server_hosts[0] if server_hosts is defined and server_hosts else targetHost }}"

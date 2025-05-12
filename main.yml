@@ -1,0 +1,95 @@
+---
+- hosts: target
+  gather_facts: false
+  tasks:
+
+  - block:
+      - name: Install k3s galaxy collection from GitHub (via shell fallback)
+        command: "ansible-galaxy collection install git+https://github.com/k3s-io/k3s-ansible.git"
+        ignore_errors: true
+
+      - name: Generate the inventory file
+        template:
+          src: "inventory.j2"
+          dest: "{{ k3s_inventory_file }}"
+
+      - name: Create the k3s cluster
+        command: "ansible-playbook k3s.orchestration.site -i {{ k3s_inventory_file }}"
+        register: cluster_result_install
+        ignore_errors: false
+        when: operation | default('install') == 'install'
+
+      - name: Upgrade the k3s cluster
+        command: "ansible-playbook k3s.orchestration.upgrade -i {{ k3s_inventory_file }}"
+        register: cluster_result_upgrade
+        ignore_errors: false
+        when: operation | default('install') == 'upgrade'
+
+      - name: Delete the k3s cluster
+        command: "ansible-playbook k3s.orchestration.reset -i {{ k3s_inventory_file }}"
+        register: cluster_result_uninstall
+        ignore_errors: false
+        when: operation | default('install') == 'uninstall'
+
+      - name: Show k3s playbook result
+        debug:
+          var: lookup('vars', 'cluster_result_' ~ (operation | default('install'))).stdout_lines
+
+    delegate_to: localhost
+
+  - block:
+      - name: Install helm (if not present)
+        community.general.snap:
+          name: helm
+          state: present
+          classic: true
+        become: true
+
+      - name: Add cert-manager Helm repository
+        kubernetes.core.helm_repository:
+          name: jetstack
+          repo_url: https://charts.jetstack.io
+        ignore_errors: true
+
+      - name: Install cert-manager
+        kubernetes.core.helm:
+          name: cert-manager
+          chart_ref: jetstack/cert-manager
+          chart_version: "{{ cert_manager_chart_version_default }}"
+          namespace: cert-manager
+          create_namespace: true
+          values:
+            installCRDs: true
+          kubeconfig: "/home/{{ ansible_user }}/.kube/config"
+        ignore_errors: true
+
+      - name: Install k8s helm galaxy collection
+        ansible.builtin.command: ansible-galaxy collection install community.kubernetes
+        delegate_to: localhost
+        ignore_errors: true
+
+      - name: Add Rancher Helm repository
+        kubernetes.core.helm_repository:
+          name: rancher-stable
+          repo_url: https://releases.rancher.com/server-charts/stable
+        ignore_errors: true
+
+      - name: Deploy Rancher from first server
+        kubernetes.core.helm:
+          name: "rancher"
+          chart_ref: "rancher-stable/rancher"
+          chart_version: "{{ rancher_chart_version | default(rancher_chart_version_default) }}"
+          namespace: "{{ rancher_namespace | default('platina') }}"
+          create_namespace: true
+          values:
+            hostname: "{{ rancher_hostname | default('rancher.local') }}"
+            replicas: 1
+            ingress:
+              tls:
+                source: self-signed
+            bootstrapPassword: "{{ rancher_bootstrap_password | default('platina') }}"
+          kubeconfig: "/home/{{ ansible_user }}/.kube/config"
+
+    when: (install_rancher | default(false)) | bool and (operation | default('install') == 'install')
+
+

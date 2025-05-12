@@ -1,0 +1,15 @@
+---
+server_hosts:
+  - 10.9.10.126
+  - 10.9.10.127
+
+#agent_hosts:
+#  - 10.0.0.21
+#  - 10.0.0.22
+
+pccagent_key: /root/.ssh/id_rsa_ansible
+k3s_version: v1.29.2+k3s1
+k3s_inventory_file: /tmp/k3s-inventory.yml
+ansible_user: pcc
+rancher_chart_version_default: "2.10.3"
+cert_manager_chart_version_default: "v1.13.1"
